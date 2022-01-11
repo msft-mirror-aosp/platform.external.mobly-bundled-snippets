@@ -28,4 +28,5 @@ android_library {
         "src/main/**/*.java",
     ],
     manifest: "src/main/AndroidManifest.xml",
+    sdk_version: "current",
 }
