@@ -20,9 +20,9 @@ android_library {
     name: "mobly-bundled-snippets",
     static_libs: [
         "androidx.test.runner",
+        "gson",
         "guava",
         "mobly-snippet-lib",
-        "gson-prebuilt-jar",
     ],
     srcs: [
         "src/main/**/*.java",
