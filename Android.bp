@@ -16,7 +16,7 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-android_library {
+android_app {
     name: "mobly-bundled-snippets",
     static_libs: [
         "androidx.test.runner",
