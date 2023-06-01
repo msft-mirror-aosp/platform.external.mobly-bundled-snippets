@@ -35,6 +35,7 @@ android_library {
         "gson",
         "guava",
         "mobly-snippet-lib",
+	"androidx.test.uiautomator_uiautomator",
     ],
     srcs: [
         "src/main/**/*.java",

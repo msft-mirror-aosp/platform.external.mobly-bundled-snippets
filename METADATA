@@ -13,7 +13,7 @@ third_party {
     type: GIT
     value: "https://github.com/google/mobly-bundled-snippets"
   }
-  version: "1ff2867fb8645c5792656bd4b822d70bbce44ec2"
-  last_upgrade_date { year: 2021 month: 12 day: 8 }
+  version: "fbd882fa01fb2134303c697195ab93b739e4ee87"
+  last_upgrade_date { year: 2023 month: 5 day: 31 }
   license_type: NOTICE
 }
