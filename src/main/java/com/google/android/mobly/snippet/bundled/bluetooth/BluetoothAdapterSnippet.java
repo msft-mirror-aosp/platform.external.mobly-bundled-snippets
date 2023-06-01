@@ -25,6 +25,10 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
 import androidx.test.platform.app.InstrumentationRegistry;
+import androidx.test.uiautomator.By;
+import androidx.test.uiautomator.BySelector;
+import androidx.test.uiautomator.UiDevice;
+import androidx.test.uiautomator.Until;
 import com.google.android.mobly.snippet.Snippet;
 import com.google.android.mobly.snippet.bundled.utils.JsonSerializer;
 import com.google.android.mobly.snippet.bundled.utils.Utils;
@@ -34,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import org.json.JSONException;
 
 /** Snippet class exposing Android APIs in BluetoothAdapter. */
@@ -45,6 +50,10 @@ public class BluetoothAdapterSnippet implements Snippet {
 
         public BluetoothAdapterSnippetException(String msg) {
             super(msg);
+        }
+
+        public BluetoothAdapterSnippetException(String msg, Throwable err) {
+            super(msg, err);
         }
     }
 
@@ -93,6 +102,16 @@ public class BluetoothAdapterSnippet implements Snippet {
         return null;
     }
 
+    /* Gets the UiDevice instance for UI operations. */
+    private static UiDevice getUiDevice() throws BluetoothAdapterSnippetException {
+        try {
+            return UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        } catch (IllegalStateException e) {
+            throw new BluetoothAdapterSnippetException("Failed to get UiDevice. Please ensure that "
+                    + "no other UiAutomation service is running.", e);
+        }
+    }
+
     @Rpc(description = "Enable bluetooth with a 30s timeout.")
     public void btEnable() throws BluetoothAdapterSnippetException, InterruptedException {
         if (mBluetoothAdapter.getState() == BluetoothAdapter.STATE_ON) {
@@ -100,7 +119,19 @@ public class BluetoothAdapterSnippet implements Snippet {
         }
         waitForStableBtState();
 
-        if (!mBluetoothAdapter.enable()) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            // BluetoothAdapter#enable is removed from public SDK for 33 and above, so uses an
+            // intent instead.
+            UiDevice uiDevice = getUiDevice();
+            Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            enableIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            // Triggers the system UI popup to ask for explicit permission.
+            mContext.startActivity(enableIntent);
+            // Clicks the "ALLOW" button.
+            BySelector allowButtonSelector = By.text(TEXT_PATTERN_ALLOW).clickable(true);
+            uiDevice.wait(Until.findObject(allowButtonSelector), 10);
+            uiDevice.findObject(allowButtonSelector).click();
+        } else if (!mBluetoothAdapter.enable()) {
             throw new BluetoothAdapterSnippetException("Failed to start enabling bluetooth.");
         }
         if (!Utils.waitUntil(
@@ -200,7 +231,20 @@ public class BluetoothAdapterSnippet implements Snippet {
             throw new BluetoothAdapterSnippetException(
                     "Bluetooth is not enabled, cannot become discoverable.");
         }
-        if (Build.VERSION.SDK_INT > 29) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            // BluetoothAdapter#setScanMode is removed from public SDK for 31 and above, so uses an
+            // intent instead.
+            UiDevice uiDevice = getUiDevice();
+            Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+            discoverableIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, duration);
+            // Triggers the system UI popup to ask for explicit permission.
+            mContext.startActivity(discoverableIntent);
+            // Clicks the "ALLOW" button.
+            BySelector allowButtonSelector = By.text(TEXT_PATTERN_ALLOW).clickable(true);
+            uiDevice.wait(Until.findObject(allowButtonSelector), 10);
+            uiDevice.findObject(allowButtonSelector).click();
+        } else if (Build.VERSION.SDK_INT >= 30) {
             if (!(boolean)
                     Utils.invokeByReflection(
                             mBluetoothAdapter,
@@ -220,6 +264,9 @@ public class BluetoothAdapterSnippet implements Snippet {
             }
         }
     }
+
+    private static final Pattern TEXT_PATTERN_ALLOW =
+            Pattern.compile("allow", Pattern.CASE_INSENSITIVE);
 
     @Rpc(description = "Cancel ongoing bluetooth discovery.")
     public void btCancelDiscovery() throws BluetoothAdapterSnippetException {
@@ -305,7 +352,7 @@ public class BluetoothAdapterSnippet implements Snippet {
                 return;
             }
         }
-        throw new NoSuchElementException("No device wih address " + deviceAddress + " is paired.");
+        throw new NoSuchElementException("No device with address " + deviceAddress + " is paired.");
     }
 
     @Override
