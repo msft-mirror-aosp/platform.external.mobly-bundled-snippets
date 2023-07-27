@@ -22,6 +22,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -35,7 +36,10 @@ import com.google.android.mobly.snippet.bundled.utils.Utils;
 import com.google.android.mobly.snippet.rpc.Rpc;
 import com.google.android.mobly.snippet.util.Log;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -62,14 +66,20 @@ public class BluetoothAdapterSnippet implements Snippet {
     // Default timeout in seconds.
     private static final int TIMEOUT_TOGGLE_STATE_SEC = 30;
     private final Context mContext;
+    private final PackageManager mPackageManager;
     private static final BluetoothAdapter mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
     private final JsonSerializer mJsonSerializer = new JsonSerializer();
     private static final ConcurrentHashMap<String, BluetoothDevice> mDiscoveryResults =
             new ConcurrentHashMap<>();
     private volatile boolean mIsDiscoveryFinished = false;
+    private final Map<String, BroadcastReceiver> mReceivers;
 
-    public BluetoothAdapterSnippet() {
+    public BluetoothAdapterSnippet() throws Throwable {
         mContext = InstrumentationRegistry.getInstrumentation().getContext();
+        // Use a synchronized map to avoid racing problems
+        mReceivers = Collections.synchronizedMap(new HashMap<String, BroadcastReceiver>());
+        Utils.adaptShellPermissionIfRequired(mContext);
+        mPackageManager = mContext.getPackageManager();
     }
 
     /**
@@ -190,6 +200,20 @@ public class BluetoothAdapterSnippet implements Snippet {
         return mBluetoothAdapter.getName();
     }
 
+    @Rpc(description = "Automatically confirm the incoming BT pairing request.")
+    public void btStartAutoAcceptIncomingPairRequest() throws Throwable {
+        BroadcastReceiver receiver = new PairingBroadcastReceiver(mContext);
+        mContext.registerReceiver(
+                receiver, PairingBroadcastReceiver.filter);
+        mReceivers.put("AutoAcceptIncomingPairReceiver", receiver);
+    }
+
+    @Rpc(description = "Stop the incoming BT pairing request.")
+    public void btStopAutoAcceptIncomingPairRequest() throws Throwable {
+        BroadcastReceiver receiver = mReceivers.remove("AutoAcceptIncomingPairReceiver");
+        mContext.unregisterReceiver(receiver);
+    }
+
     @Rpc(description = "Returns the hardware address of the local Bluetooth adapter.")
     public String btGetAddress() {
         return mBluetoothAdapter.getAddress();
@@ -240,10 +264,18 @@ public class BluetoothAdapterSnippet implements Snippet {
             discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, duration);
             // Triggers the system UI popup to ask for explicit permission.
             mContext.startActivity(discoverableIntent);
-            // Clicks the "ALLOW" button.
-            BySelector allowButtonSelector = By.text(TEXT_PATTERN_ALLOW).clickable(true);
-            uiDevice.wait(Until.findObject(allowButtonSelector), 10);
-            uiDevice.findObject(allowButtonSelector).click();
+
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)) {
+                // Clicks the "OK" button.
+                BySelector okButtonSelector = By.desc(TEXT_PATTERN_OK).clickable(true);
+                uiDevice.wait(Until.findObject(okButtonSelector), 10);
+                uiDevice.findObject(okButtonSelector).click();
+            } else {
+                // Clicks the "ALLOW" button.
+                BySelector allowButtonSelector = By.text(TEXT_PATTERN_ALLOW).clickable(true);
+                uiDevice.wait(Until.findObject(allowButtonSelector), 10);
+                uiDevice.findObject(allowButtonSelector).click();
+            }
         } else if (Build.VERSION.SDK_INT >= 30) {
             if (!(boolean)
                     Utils.invokeByReflection(
@@ -267,6 +299,8 @@ public class BluetoothAdapterSnippet implements Snippet {
 
     private static final Pattern TEXT_PATTERN_ALLOW =
             Pattern.compile("allow", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TEXT_PATTERN_OK =
+            Pattern.compile("ok", Pattern.CASE_INSENSITIVE);
 
     @Rpc(description = "Cancel ongoing bluetooth discovery.")
     public void btCancelDiscovery() throws BluetoothAdapterSnippetException {
@@ -356,7 +390,12 @@ public class BluetoothAdapterSnippet implements Snippet {
     }
 
     @Override
-    public void shutdown() {}
+    public void shutdown() {
+        for (Map.Entry<String, BroadcastReceiver> entry : mReceivers.entrySet()) {
+            mContext.unregisterReceiver(entry.getValue());
+        }
+        mReceivers.clear();
+    }
 
     private class BluetoothScanReceiver extends BroadcastReceiver {
 
