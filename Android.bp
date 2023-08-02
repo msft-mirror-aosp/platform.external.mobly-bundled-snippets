@@ -32,10 +32,11 @@ android_library {
     name: "mobly-bundled-snippets-lib",
     static_libs: [
         "androidx.test.runner",
-        "gson",
+	"androidx.test.uiautomator_uiautomator",
+	"error_prone_annotations",
+	"gson",
         "guava",
         "mobly-snippet-lib",
-	"androidx.test.uiautomator_uiautomator",
     ],
     srcs: [
         "src/main/**/*.java",
