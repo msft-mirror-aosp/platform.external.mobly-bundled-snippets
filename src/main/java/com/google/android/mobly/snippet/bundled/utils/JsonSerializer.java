@@ -16,8 +16,13 @@
 
 package com.google.android.mobly.snippet.bundled.utils;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import android.annotation.TargetApi;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattService;
 import android.bluetooth.le.AdvertiseSettings;
 import android.bluetooth.le.ScanRecord;
 import android.net.DhcpInfo;
@@ -27,6 +32,8 @@ import android.net.wifi.WifiInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelUuid;
+import android.util.Base64;
+import android.util.SparseArray;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import java.lang.reflect.Modifier;
@@ -41,17 +48,13 @@ import org.json.JSONObject;
  * A collection of methods used to serialize data types defined in Android API into JSON strings.
  */
 public class JsonSerializer {
-    private static Gson mGson;
-
-    public JsonSerializer() {
-        GsonBuilder builder = new GsonBuilder();
-        mGson =
-                builder.serializeNulls()
-                        .excludeFieldsWithModifiers(Modifier.STATIC)
-                        .enableComplexMapKeySerialization()
-                        .disableInnerClassSerialization()
-                        .create();
-    }
+    private static final Gson gson =
+        new GsonBuilder()
+            .serializeNulls()
+            .excludeFieldsWithModifiers(Modifier.STATIC)
+            .enableComplexMapKeySerialization()
+            .disableInnerClassSerialization()
+            .create();
 
     /**
      * Remove the extra quotation marks from the beginning and the end of a string.
@@ -89,11 +92,11 @@ public class JsonSerializer {
      * @throws JSONException
      */
     private JSONObject defaultSerialization(Object data) throws JSONException {
-        return new JSONObject(mGson.toJson(data));
+        return new JSONObject(gson.toJson(data));
     }
 
     private JSONObject serializeDhcpInfo(DhcpInfo data) throws JSONException {
-        JSONObject result = new JSONObject(mGson.toJson(data));
+        JSONObject result = new JSONObject(gson.toJson(data));
         int ipAddress = data.ipAddress;
         byte[] addressBytes = {
             (byte) (0xff & ipAddress),
@@ -111,14 +114,14 @@ public class JsonSerializer {
     }
 
     private JSONObject serializeWifiConfiguration(WifiConfiguration data) throws JSONException {
-        JSONObject result = new JSONObject(mGson.toJson(data));
+        JSONObject result = new JSONObject(gson.toJson(data));
         result.put("Status", WifiConfiguration.Status.strings[data.status]);
         result.put("SSID", trimQuotationMarks(data.SSID));
         return result;
     }
 
     private JSONObject serializeWifiInfo(WifiInfo data) throws JSONException {
-        JSONObject result = new JSONObject(mGson.toJson(data));
+        JSONObject result = new JSONObject(gson.toJson(data));
         result.put("SSID", trimQuotationMarks(data.getSSID()));
         for (SupplicantState state : SupplicantState.values()) {
             if (data.getSupplicantState().equals(state)) {
@@ -128,7 +131,7 @@ public class JsonSerializer {
         return result;
     }
 
-    public Bundle serializeBluetoothDevice(BluetoothDevice data) {
+    public static Bundle serializeBluetoothDevice(BluetoothDevice data) {
         Bundle result = new Bundle();
         result.putString("Address", data.getAddress());
         final String bondState =
@@ -187,6 +190,43 @@ public class JsonSerializer {
         Bundle result = new Bundle();
         result.putString("DeviceName", record.getDeviceName());
         result.putInt("TxPowerLevel", record.getTxPowerLevel());
+        result.putParcelableArrayList("Services", serializeBleScanServices(record));
+        result.putBundle(
+            "manufacturerSpecificData", serializeBleScanManufacturerSpecificData(record));
+        return result;
+    }
+
+    /** Serialize manufacturer specific data from ScanRecord for Bluetooth LE. */
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    private ArrayList<Bundle> serializeBleScanServices(ScanRecord record) {
+        ArrayList<Bundle> result = new ArrayList<>();
+        if (record.getServiceUuids() != null) {
+            for (ParcelUuid uuid : record.getServiceUuids()) {
+                Bundle service = new Bundle();
+                service.putString("UUID", uuid.getUuid().toString());
+                if (record.getServiceData(uuid) != null) {
+                    service.putString(
+                            "Data",
+                            new String(Base64.encode(record.getServiceData(uuid), Base64.NO_WRAP),
+                                      UTF_8));
+                } else {
+                    service.putString("Data", "");
+                }
+                result.add(service);
+            }
+        }
+        return result;
+    }
+
+    /** Serialize manufacturer specific data from ScanRecord for Bluetooth LE. */
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    private Bundle serializeBleScanManufacturerSpecificData(ScanRecord record) {
+        Bundle result = new Bundle();
+        SparseArray<byte[]> sparseArray = record.getManufacturerSpecificData();
+        for (int i = 0; i < sparseArray.size(); i++) {
+            int key = sparseArray.keyAt(i);
+            result.putByteArray(String.valueOf(key), sparseArray.get(key));
+        }
         return result;
     }
 
@@ -200,6 +240,44 @@ public class JsonSerializer {
                 "Mode", MbsEnums.BLE_ADVERTISE_MODE.getString(advertiseSettings.getMode()));
         result.putInt("Timeout", advertiseSettings.getTimeout());
         result.putBoolean("IsConnectable", advertiseSettings.isConnectable());
+        return result;
+    }
+
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public static Bundle serializeBluetoothGatt(BluetoothGatt gatt) {
+        Bundle result = new Bundle();
+        ArrayList<Bundle> services = new ArrayList<>();
+        for (BluetoothGattService service : gatt.getServices()) {
+            services.add(JsonSerializer.serializeBluetoothGattService(service));
+        }
+        result.putParcelableArrayList("Services", services);
+        result.putBundle("Device", JsonSerializer.serializeBluetoothDevice(gatt.getDevice()));
+        return result;
+    }
+
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public static Bundle serializeBluetoothGattService(BluetoothGattService service) {
+        Bundle result = new Bundle();
+        result.putString("UUID", service.getUuid().toString());
+        result.putString("Type", MbsEnums.BLE_SERVICE_TYPE.getString(service.getType()));
+        ArrayList<Bundle> characteristics = new ArrayList<>();
+        for (BluetoothGattCharacteristic characteristic : service.getCharacteristics()) {
+            characteristics.add(serializeBluetoothGattCharacteristic(characteristic));
+        }
+        result.putParcelableArrayList("Characteristics", characteristics);
+        return result;
+    }
+
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    public static Bundle serializeBluetoothGattCharacteristic(
+            BluetoothGattCharacteristic characteristic) {
+        Bundle result = new Bundle();
+        result.putString("UUID", characteristic.getUuid().toString());
+        result.putString(
+                "Property", MbsEnums.BLE_PROPERTY_TYPE.getString(characteristic.getProperties()));
+        result.putString(
+                "Permission",
+                MbsEnums.BLE_PERMISSION_TYPE.getString(characteristic.getPermissions()));
         return result;
     }
 }
