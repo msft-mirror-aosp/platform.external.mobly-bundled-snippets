@@ -19,8 +19,22 @@ package {
 android_test {
     name: "mobly-bundled-snippets",
     static_libs: [
+        "mobly-bundled-snippets-lib",
+    ],
+    srcs: [
+        "src/main/**/*.java",
+    ],
+    manifest: "src/main/AndroidManifest.xml",
+    sdk_version: "current",
+}
+
+android_library {
+    name: "mobly-bundled-snippets-lib",
+    static_libs: [
         "androidx.test.runner",
-        "gson",
+	"androidx.test.uiautomator_uiautomator",
+	"error_prone_annotations",
+	"gson",
         "guava",
         "mobly-snippet-lib",
     ],
@@ -29,4 +43,5 @@ android_test {
     ],
     manifest: "src/main/AndroidManifest.xml",
     sdk_version: "current",
+    min_sdk_version: "31",
 }
