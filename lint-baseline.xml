@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.4.0-alpha08" type="baseline" client="" dependencies="true" name="" variant="all" version="8.4.0-alpha08">
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 31 (current min is 30): `android.bluetooth.BluetoothHeadset#isVoiceRecognitionSupported`"
+        errorLine1="                return mBluetoothHeadset.isVoiceRecognitionSupported(device);"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="external/mobly-bundled-snippets/src/main/java/com/google/android/mobly/snippet/bundled/bluetooth/profiles/BluetoothHeadsetSnippet.java"
+            line="151"
+            column="42"/>
+    </issue>
+
+</issues>
