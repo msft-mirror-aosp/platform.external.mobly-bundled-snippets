@@ -16,8 +16,10 @@
 
 package com.google.android.mobly.snippet.bundled.bluetooth;
 
+import android.annotation.TargetApi;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothStatusCodes;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -34,6 +36,7 @@ import com.google.android.mobly.snippet.Snippet;
 import com.google.android.mobly.snippet.bundled.utils.JsonSerializer;
 import com.google.android.mobly.snippet.bundled.utils.Utils;
 import com.google.android.mobly.snippet.rpc.Rpc;
+import com.google.android.mobly.snippet.rpc.RpcMinSdk;
 import com.google.android.mobly.snippet.util.Log;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -278,24 +281,17 @@ public class BluetoothAdapterSnippet implements Snippet {
                 uiDevice.wait(Until.findObject(allowButtonSelector), TIMEOUT_UI_UPDATE_MS);
                 uiDevice.findObject(allowButtonSelector).click();
             }
-        } else if (Build.VERSION.SDK_INT >= 30) {
-            if (!(boolean)
-                    Utils.invokeByReflection(
-                            mBluetoothAdapter,
-                            "setScanMode",
-                            BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE,
-                            (long) duration * 1000)) {
+        } else if (Build.VERSION.SDK_INT == 30) {
+            if (!(boolean) Utils.invokeByReflection(
+                    mBluetoothAdapter,
+                    "setScanMode",
+                    BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE)) {
                 throw new BluetoothAdapterSnippetException("Failed to become discoverable.");
-            } else {
-                if (!(boolean)
-                        Utils.invokeByReflection(
-                                mBluetoothAdapter,
-                                "setScanMode",
-                                BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE,
-                                duration)) {
-                    throw new BluetoothAdapterSnippetException("Failed to become discoverable.");
-                }
             }
+        } else {
+            throw new UnsupportedOperationException(
+                    "Not support set device to be discoverable on SDK version:"
+                            + Build.VERSION.SDK_INT);
         }
     }
 
@@ -389,6 +385,13 @@ public class BluetoothAdapterSnippet implements Snippet {
             }
         }
         throw new NoSuchElementException("No device with address " + deviceAddress + " is paired.");
+    }
+
+    @TargetApi(Build.VERSION_CODES.TIRAMISU)
+    @RpcMinSdk(Build.VERSION_CODES.TIRAMISU)
+    @Rpc(description = "Returns true if LE audio is supported, false otherwise.")
+    public boolean btIsLeAudioSupported() {
+        return mBluetoothAdapter.isLeAudioSupported() == BluetoothStatusCodes.FEATURE_SUPPORTED;
     }
 
     @Override

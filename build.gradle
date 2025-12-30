@@ -4,7 +4,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.3.1'
+        classpath 'com.android.tools.build:gradle:8.7.3'
 
         // NOTE: Do not place your application dependencies here.
     }
@@ -29,7 +29,7 @@ allprojects {
 apply plugin: 'com.android.application'
 
 android {
-    compileSdk 33
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.google.android.mobly.snippet.bundled"
@@ -39,6 +39,7 @@ android {
         versionName "0.0.1"
         setProperty("archivesBaseName", "mobly-bundled-snippets")
         multiDexEnabled true
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -50,12 +51,13 @@ android {
         warningsAsErrors true
         disable 'HardwareIds','MissingApplicationIcon','GoogleAppIndexingWarning','InvalidPackage','OldTargetApi'
     }
+    namespace 'com.google.android.mobly.snippet.bundled'
 }
 
 // Produces a jar of source files. Needed for compliance reasons.
 task sourcesJar(type: Jar) {
     from android.sourceSets.main.java.srcDirs
-    classifier = 'src'
+    archiveClassifier.set('src')
 }
 
 task javadoc(type: Javadoc) {
@@ -78,6 +80,7 @@ dependencies {
     implementation 'com.google.errorprone:error_prone_annotations:2.15.0'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.10'
 
+    testImplementation 'org.robolectric:robolectric:4.14.1'
     testImplementation 'com.google.errorprone:error_prone_annotations:2.15.0'
     testImplementation 'com.google.guava:guava:31.0.1-jre'
     testImplementation 'com.google.truth:truth:1.1.2'

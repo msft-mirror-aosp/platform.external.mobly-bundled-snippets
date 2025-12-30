@@ -16,6 +16,7 @@
 
 package com.google.android.mobly.snippet.bundled.bluetooth;
 
+import android.annotation.TargetApi;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
@@ -23,6 +24,7 @@ import android.bluetooth.BluetoothGattServer;
 import android.bluetooth.BluetoothGattServerCallback;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.os.Build.VERSION_CODES;
 import android.os.DeadObjectException;
@@ -40,9 +42,11 @@ import com.google.android.mobly.snippet.rpc.AsyncRpc;
 import com.google.android.mobly.snippet.rpc.Rpc;
 import com.google.android.mobly.snippet.rpc.RpcMinSdk;
 import com.google.android.mobly.snippet.util.Log;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import java.util.UUID;
 
 /** Snippet class exposing Android APIs in BluetoothGattServer. */
 public class BluetoothGattServerSnippet implements Snippet {
@@ -66,6 +70,16 @@ public class BluetoothGattServerSnippet implements Snippet {
         bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
         dataHolder = new DataHolder();
         eventCache = EventCache.getInstance();
+    }
+
+    private BluetoothDevice getDeviceByAddress(String address) {
+        List<BluetoothDevice> devices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT);
+        for (BluetoothDevice device : devices) {
+            if (device.getAddress().equals(address)) {
+                return device;
+            }
+        }
+        return null;
     }
 
     @RpcMinSdk(VERSION_CODES.LOLLIPOP)
@@ -114,6 +128,51 @@ public class BluetoothGattServerSnippet implements Snippet {
             throw new BluetoothGattServerSnippetException("BLE server is not initialized.");
         }
         bluetoothGattServer.close();
+    }
+
+    @RpcMinSdk(VERSION_CODES.LOLLIPOP)
+    @Rpc(description = "Disconnect a device from the server.")
+    public void bleCancelConnectionByAddress(String address) throws BluetoothGattServerSnippetException {
+        if (bluetoothGattServer == null) {
+            throw new BluetoothGattServerSnippetException("BLE server is not initialized.");
+        }
+        BluetoothDevice device = getDeviceByAddress(address);
+        if (device != null) {
+            bluetoothGattServer.cancelConnection(device);
+        }
+    }
+
+    @TargetApi(VERSION_CODES.TIRAMISU)
+    @RpcMinSdk(VERSION_CODES.TIRAMISU)
+    @Rpc(description = "Send a notification that a characteristic changed.")
+    public void bleNotifyCharacteristicChanged(
+            String address,
+            String serviceUuid,
+            String characteristicUuid,
+            boolean confirm,
+            String base64Value)
+            throws BluetoothGattServerSnippetException {
+        if (bluetoothGattServer == null) {
+            throw new BluetoothGattServerSnippetException("BLE server is not initialized.");
+        }
+
+        BluetoothDevice device = getDeviceByAddress(address);
+        if (device == null) {
+            throw new BluetoothGattServerSnippetException("Device not found: " + address);
+        }
+
+        BluetoothGattService service = bluetoothGattServer.getService(UUID.fromString(serviceUuid));
+        if (service == null) {
+            throw new BluetoothGattServerSnippetException("Service not found: " + serviceUuid);
+        }
+        BluetoothGattCharacteristic characteristic =
+                service.getCharacteristic(UUID.fromString(characteristicUuid));
+        if (characteristic == null) {
+            throw new BluetoothGattServerSnippetException(
+                    "Characteristic not found: " + characteristicUuid);
+        }
+        byte[] value = Base64.decode(base64Value, Base64.NO_WRAP);
+        bluetoothGattServer.notifyCharacteristicChanged(device, characteristic, confirm, value);
     }
 
     private class DefaultBluetoothGattServerCallback extends BluetoothGattServerCallback {
@@ -185,6 +244,14 @@ public class BluetoothGattServerSnippet implements Snippet {
             Log.d("Bluetooth Gatt Server received an execute write request");
             bluetoothGattServer.sendResponse(
                     device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null);
+        }
+
+        @Override
+        public void onMtuChanged(BluetoothDevice device, int mtu) {
+            SnippetEvent event = new SnippetEvent(callbackId, "onMtuChanged");
+            event.getData().putInt("mtu", mtu);
+            event.getData().putBundle("device", JsonSerializer.serializeBluetoothDevice(device));
+            eventCache.postEvent(event);
         }
     }
 
