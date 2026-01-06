@@ -26,6 +26,7 @@ android_test {
     ],
     manifest: "src/main/AndroidManifest.xml",
     sdk_version: "current",
+    min_sdk_version: "30",
 }
 
 android_library {
